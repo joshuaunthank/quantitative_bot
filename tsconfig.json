@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"noImplicitAny": true,
+		"removeComments": true,
+		"preserveConstEnums": true,
+		"sourceMap": true,
+		"outDir": "./dist", // Ensure the output directory is specified
+		"declaration": true,
+		"emitDeclarationOnly": false, // Ensure this is set to false or remove it
+		"esModuleInterop": true
+	},
+	"include": ["src/**/*.ts"] // Use "include" for glob patterns
+}
