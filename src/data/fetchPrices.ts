@@ -1,5 +1,4 @@
 const ccxt = require("ccxt"); // Use require for CommonJS modules
-console.log(ccxt.pro);
 
 import WebSocket from "ws";
 import logger from "../utils/logger";
