@@ -1,111 +1,41 @@
-import { evaluateEntryConditions } from "./entryConditions";
-import { calculateExitConditions, updateTrailingExit } from "./riskManager";
+import { forecastPriceWithAR4 } from "../model/arimaForecast";
 import logger from "../utils/logger";
-
-let activeTrade: {
-	action: "long" | "short";
-	entryPrice: number;
-	stopLoss: number;
-	trailingExitActivation: number;
-	trailingExit?: number;
-} | null = null;
+import strategyConfig from "../config/strategy.config";
 
 export function handlePriceUpdate(
 	currentPrice: number,
 	isCandleClosed: boolean,
-	forecastedPrice: number
+	openPrice: number,
+	priceBuffer: number[]
 ) {
 	if (isCandleClosed) {
-		logger.info(`[TradeManager] Candle closed. Waiting for next forecast.`);
-		return;
-	}
+		// Update price buffer
+		priceBuffer.push(currentPrice);
 
-	if (!activeTrade) {
-		// Evaluate entry conditions
-		const entryDecision = evaluateEntryConditions(
-			forecastedPrice,
-			currentPrice
-		);
+		// Ensure the buffer doesn't exceed the required size
+		if (priceBuffer.length > 100) priceBuffer.shift();
 
-		if (entryDecision.action === "long" || entryDecision.action === "short") {
-			// Enter a trade
-			const exitConditions = calculateExitConditions(
-				entryDecision.entryPrice!,
-				entryDecision.action,
-				forecastedPrice
-			);
+		// Calculate AR(4) forecast
+		try {
+			const coefficients = strategyConfig.indicators.coefficients;
+			const forecastedPrice = forecastPriceWithAR4(priceBuffer, coefficients);
 
-			activeTrade = {
-				action: entryDecision.action,
-				entryPrice: entryDecision.entryPrice!,
-				stopLoss: exitConditions.stopLoss,
-				trailingExitActivation: exitConditions.trailingExitActivation,
-			};
+			logger.info(`Forecasted Price: ${forecastedPrice.toFixed(2)}`);
+			logger.info(`Current Price: ${currentPrice.toFixed(2)}`);
 
-			logger.info(
-				`Entered ${entryDecision.action.toUpperCase()} trade at ${entryDecision.entryPrice!.toFixed(
-					2
-				)}. Stop Loss: ${exitConditions.stopLoss.toFixed(
-					2
-				)}, Trailing Exit Activation: ${exitConditions.trailingExitActivation.toFixed(
-					2
-				)}`
-			);
-		}
-	} else {
-		// Update trailing exit for an active trade
-		if (
-			currentPrice >= activeTrade.trailingExitActivation &&
-			activeTrade.action === "long"
-		) {
-			const trailingExit = updateTrailingExit(
-				currentPrice,
-				activeTrade.trailingExitActivation
-			);
-
-			if (trailingExit) {
-				activeTrade.trailingExit = trailingExit;
-				logger.info(`Updated Trailing Exit: ${trailingExit.toFixed(2)}`);
+			// Trading logic based on forecast
+			const threshold = strategyConfig.threshold;
+			if (forecastedPrice > currentPrice + threshold) {
+				logger.info("Signal: BUY");
+				// Place buy order logic here
+			} else if (forecastedPrice < currentPrice - threshold) {
+				logger.info("Signal: SELL");
+				// Place sell order logic here
+			} else {
+				logger.info("Signal: HOLD");
 			}
-		} else if (
-			currentPrice <= activeTrade.trailingExitActivation &&
-			activeTrade.action === "short"
-		) {
-			const trailingExit = updateTrailingExit(
-				currentPrice,
-				activeTrade.trailingExitActivation
-			);
-
-			if (trailingExit) {
-				activeTrade.trailingExit = trailingExit;
-				logger.info(`Updated Trailing Exit: ${trailingExit.toFixed(2)}`);
-			}
-		}
-
-		// Check for stop-loss or trailing exit conditions
-		if (
-			(activeTrade.action === "long" &&
-				(currentPrice <= activeTrade.stopLoss ||
-					(activeTrade.trailingExit !== undefined &&
-						currentPrice <= activeTrade.trailingExit))) ||
-			(activeTrade.action === "short" &&
-				(currentPrice >= activeTrade.stopLoss ||
-					(activeTrade.trailingExit !== undefined &&
-						currentPrice >= activeTrade.trailingExit)))
-		) {
-			logger.info(
-				`Exited ${activeTrade.action.toUpperCase()} trade at ${currentPrice.toFixed(
-					2
-				)}`
-			);
-			activeTrade = null; // Reset active trade
-
-			// Add a cooldown period to prevent immediate re-entry
-			setTimeout(() => {
-				logger.info(
-					`[TradeManager] Cooldown period ended. Ready for new trades.`
-				);
-			}, 5000); // 5-second cooldown
+		} catch (error) {
+			logger.error(`Error in AR(4) forecast: ${error.message}`);
 		}
 	}
 }

@@ -20,6 +20,11 @@ const coefficients = [0.25, 0.25, 0.25, 0.25]; // AR(4) coefficients
 		const forecastedPrice = forecastPriceWithAR4(priceBuffer, coefficients);
 
 		// Handle price updates for entry/exit conditions
-		handlePriceUpdate(currentPrice, isCandleClosed, forecastedPrice);
+		handlePriceUpdate(
+			currentPrice,
+			isCandleClosed,
+			forecastedPrice,
+			priceBuffer
+		);
 	});
 })();
